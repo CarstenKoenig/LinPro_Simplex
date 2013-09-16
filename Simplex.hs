@@ -156,14 +156,12 @@ pivoting pd (indIn, indOut) = PivotDict (nrBasic pd) (nrNonBasic pd) basicIds' n
         mapC i
           | i == indIn = -factor * c indIn
           | otherwise  = c i + c indIn * a (indOut, i) * factor
-        a (i, j) = getA pd (i, j)
-        aswitch  = a (indOut, indIn)
-        b i      = getB pd i
         bout     = b indOut * factor
+        cv'      = objectiveValue pd + bout * c indIn
+        factor   = (-1) / a (indOut, indIn)
+        a (i, j) = getA pd (i, j)
+        b i      = getB pd i
         c i      = getCoeff pd i
-        cv       = objectiveValue pd
-        cv'      = cv + bout * c indIn
-        factor   = (-1) / aswitch
 
 replaceAt :: [a] -> Int -> a -> [a]
 replaceAt [] _ _ = []
