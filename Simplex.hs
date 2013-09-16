@@ -3,8 +3,6 @@ module Simplex
     , PivotingStepResult (..)
     , PivotingResult (..)
     , VarIndex
-    , OutputFile (..)
-    , ResultFile (..)
     , findInOutVariables
     , pivotStep
     , runPivoting
@@ -39,28 +37,31 @@ data PivotDict = PivotDict
     , objectiveCoeffs :: [Double]     -- ^ these are the coefficents for the objective function (c_0 and c_1 ... c_n)
     } deriving (Show)
 
-
+{- |
+  result of a single pivoting step
+  Finished indicates that the simplex-algorithm cannot find a better solution (indeed it should be optimal)
+  Intermediate indicates that there are possible more steps to improve the result
+  IsUnbounded indicates that there is no optimal solution because the objective function can be made arbitrarily large
+-}
 data PivotingStepResult =
     Finished PivotDict
   | Intermediate PivotDict  
   | IsUnbounded
   deriving (Show)
 
+{- |
+  result of a simplex run
+  Optimized indicates that the simplex-algorithm cannot find a better solution (indeed it should be optimal)
+  ProblemUnbounded indicates that there is no optimal solution because the objective function can be made arbitrarily large
+-}
 data PivotingResult =
     Optimized { result :: PivotDict, steps :: Int }
   | ProblemUnbounded
   deriving (Show)
 
-data OutputFile = 
-      Bounded   { inId :: Int, outId :: Int, newObjective :: Double }
-    | Unbounded
-    deriving (Show)    
-
-data ResultFile = 
-      BoundedResult   { value :: Double, nrSteps :: Int }
-    | UnboundedResult
-    deriving (Show)    
-
+-- | helper function for the assignment 
+-- tries to calculate the input variable-id (the variable that will get moved into the basic-variables)
+-- and the output variable-id (the variable that will get moved from the basic-variables into the non-basic variables)
 findInOutVariables :: PivotDict -> Maybe (VarId, VarId, Double)
 findInOutVariables pd = do
     inIndex       <- findInVariableIndex pd
@@ -69,6 +70,10 @@ findInOutVariables pd = do
     let c         = objectiveValue pd'
     return (getNonBasicId pd inIndex, getBasicId pd outIndex, c)
 
+-- | intermediate function that performs a single pivoting-operation on a Pivot-Dictionary
+-- if it cannot find a in-Variable the problem should be solved
+-- if it cannot find a output-variable to the found input-variable the problem is unbounded
+-- in every other case it will perform the pivoting step using the pivoting function
 pivotStep :: PivotDict -> PivotingStepResult
 pivotStep pd =
   case findInVariableIndex pd of
@@ -77,6 +82,7 @@ pivotStep pd =
                       Nothing       -> IsUnbounded 
                       Just outIndex -> Intermediate $ pivoting pd (inIndex, outIndex)
 
+-- | runs pivotStep as long as it can be improved (Intermediate result)
 runPivoting :: PivotDict -> PivotingResult
 runPivoting = runner 0
   where 
@@ -86,6 +92,7 @@ runPivoting = runner 0
         IsUnbounded      -> ProblemUnbounded
         Intermediate pd' -> runner (i+1) pd'
 
+-- | extracts the objective-value of a given Pivot-Dictionary
 objectiveValue :: PivotDict -> Double
 objectiveValue = head . objectiveCoeffs
 
@@ -145,7 +152,7 @@ pivoting pd (indIn, indOut) = PivotDict (nrBasic pd) (nrNonBasic pd) basicIds' n
           | i == indOut && j == indIn = -factor
           | i == indOut && j /= indIn = factor * a (indOut, j)
           | i /= indOut && j == indIn = -factor * a (i, indIn)
-          | i /= indOut && j /= indIn = a (i,j) + a (i, indIn) * a (indOut, j) * factor
+          | otherwise                 = a (i,j) + a (i, indIn) * a (indOut, j) * factor
         mapC i
           | i == indIn = -factor * c indIn
           | otherwise  = c i + c indIn * a (indOut, i) * factor
@@ -157,4 +164,9 @@ pivoting pd (indIn, indOut) = PivotDict (nrBasic pd) (nrNonBasic pd) basicIds' n
         cv       = objectiveValue pd
         cv'      = cv + bout * c indIn
         factor   = (-1) / aswitch
-        replaceAt ls ind v = [ if i == ind then v else ls!!i | i <- [0..length ls -1]]
+
+replaceAt :: [a] -> Int -> a -> [a]
+replaceAt [] _ _ = []
+replaceAt (h:tl) i v
+  | i == 0    = v:tl
+  | otherwise = h:replaceAt tl (i-1) v

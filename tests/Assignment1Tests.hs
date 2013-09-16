@@ -48,13 +48,13 @@ checkProblem2 (file, (pd, (BoundedResult val s))) = do
     case runPivoting pd of
         ProblemUnbounded -> 
             assertFailure $ "should be BOUNDED                - FAILED"
-        Optimized pd os -> do
+        Optimized pd' os -> do
             if os == s then return ()
             else 
                 assertFailure $ "STEPS do not match         - FAILED (expected " ++ show s ++ " but was " ++ show os ++ ")"
-            if objectiveValue pd `near` val then return ()
+            if objectiveValue pd' `near` val then return ()
             else 
-                assertFailure $ "objective value            - FAILED (expected " ++ show val ++ " but was " ++ show (objectiveValue pd) ++ ")"
+                assertFailure $ "objective value            - FAILED (expected " ++ show val ++ " but was " ++ show (objectiveValue pd') ++ ")"
 
 
 loadAll :: (FilePath -> IO a) -> FilePath -> IO [ (FilePath, (PivotDict, a))]

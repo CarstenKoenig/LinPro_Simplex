@@ -1,5 +1,7 @@
 module FileIO 
-    ( readDictFile
+    ( OutputFile (..)
+    , ResultFile (..)
+    , readDictFile
     , readOutputForDictFile
     , readResultForDictFile
     , writeOutputFile
@@ -15,6 +17,15 @@ import System.FilePath((</>), addExtension)
 
 import Simplex
 
+data OutputFile = 
+      Bounded   { inId :: Int, outId :: Int, newObjective :: Double }
+    | Unbounded
+    deriving (Show)    
+
+data ResultFile = 
+      BoundedResult   { value :: Double, nrSteps :: Int }
+    | UnboundedResult
+    deriving (Show)    
 
 readDictFile :: FilePath -> IO PivotDict
 readDictFile =  (liftM readPivotDict) . fileContent
