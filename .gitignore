@@ -1,0 +1,9 @@
+dist
+cabal-dev
+part1TestCases
+*.o
+*.hi
+*.chi
+*.chs.h
+.virthualenv
+*.sublime-workspace
