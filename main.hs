@@ -11,6 +11,15 @@ runAssignment pd =
         Nothing          -> Unbounded
         Just (iV, oV, c) -> Bounded iV oV c
 
+stepOne :: FilePath -> IO PivotingStepResult
+stepOne file = do
+    pd <- readDictFile file
+    return $ pivotStep pd
+
+run :: FilePath -> IO PivotingResult
+run file = do
+    pd <- readDictFile file
+    return $ runPivoting pd
 
 main :: IO()
 main = do

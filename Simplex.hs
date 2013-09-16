@@ -1,8 +1,12 @@
 module Simplex 
     ( PivotDict (..)
+    , PivotingStepResult (..)
+    , PivotingResult (..)
     , VarIndex
     , OutputFile (..)
     , findInOutVariables
+    , pivotStep
+    , runPivoting
     ) where
 
 import Data.List (minimumBy)
@@ -34,6 +38,17 @@ data PivotDict = PivotDict
     } deriving (Show)
 
 
+data PivotingStepResult =
+    Finished PivotDict
+  | Intermediate PivotDict  
+  | IsUnbounded
+  deriving (Show)
+
+data PivotingResult =
+    Optimized PivotDict
+  | ProblemUnbounded
+  deriving (Show)
+
 data OutputFile = 
       Bounded   { inId :: Int, outId :: Int, newObjective :: Double }
     | Unbounded
@@ -43,8 +58,24 @@ findInOutVariables :: PivotDict -> Maybe (VarId, VarId, Double)
 findInOutVariables pd = do
     inIndex       <- findInVariableIndex pd
     outIndex      <- findOutVariableIndex pd inIndex
-    let c         = findNewObjectiveValue pd (inIndex, outIndex)
-    return (getNonBasicId pd inIndex, getBasicId pd outIndex, objectiveValue pd + c)
+    let pd'       = pivoting pd (inIndex, outIndex)
+    let c         = objectiveValue pd'
+    return (getNonBasicId pd inIndex, getBasicId pd outIndex, c)
+
+pivotStep :: PivotDict -> PivotingStepResult
+pivotStep pd =
+  case findInVariableIndex pd of
+    Nothing      -> Finished pd
+    Just inIndex -> case findOutVariableIndex pd inIndex of
+                      Nothing       -> IsUnbounded 
+                      Just outIndex -> Intermediate $ pivoting pd (inIndex, outIndex)
+
+runPivoting :: PivotDict -> PivotingResult
+runPivoting pd =
+  case pivotStep pd of
+    Finished pd'     -> Optimized pd'
+    IsUnbounded      -> ProblemUnbounded
+    Intermediate pd' -> runPivoting pd'
 
 objectiveValue :: PivotDict -> Double
 objectiveValue = head . objectiveCoeffs
@@ -67,9 +98,6 @@ getBasicId pd index = basicIds pd !! index
 getNonBasicId :: PivotDict -> VarIndex -> VarId
 getNonBasicId pd index = nonBasicIds pd !! index
 
-isFeasible :: PivotDict -> Bool
-isFeasible pd = all (>= 0) $ bList pd
-
 findInVariableIndex :: PivotDict -> Maybe VarIndex
 findInVariableIndex pd =
   if null candidates then Nothing else Just $ minimumBy comp candidates
@@ -89,9 +117,30 @@ findOutVariableIndex pd inIndex =
         a i        = getA pd (i, inIndex)
         b i        = getB pd i
 
-findNewObjectiveValue :: PivotDict -> (VarIndex, VarIndex) -> Double
-findNewObjectiveValue pd (inIndex, outIndex) = c outIndex
-  where factor i   = b i / (- a i)
-        c i        = getCoeff pd inIndex * factor i
-        a i        = getA pd (i, inIndex)
-        b i        = getB pd i
+pivoting :: PivotDict -> (VarIndex, VarIndex) -> PivotDict
+pivoting pd (indIn, indOut) = PivotDict (nrBasic pd) (nrNonBasic pd) basicIds' nonBasicIds' bs' as' cs'
+  where basicIds'    = replaceAt (basicIds pd) indOut (getNonBasicId pd indIn)
+        nonBasicIds' = replaceAt (nonBasicIds pd) indIn (getBasicId pd indOut)
+        bs'          = [ mapB i    | i <- [0..nrNonBasic pd -1]]
+        as'          = [ [mapA i j | j <- [0..nrBasic pd -1]] | i <- [0..nrNonBasic pd -1] ]
+        cs'          = cv' : [ mapC i | i <- [0..nrBasic pd -1]]
+        mapB i
+          | i == indOut = bout
+          | otherwise   = b i + a (i, indIn) * bout
+        mapA i j
+          | i == indOut && j == indIn = -factor
+          | i == indOut && j /= indIn = factor * a (indOut, j)
+          | i /= indOut && j == indIn = -factor * a (i, indIn)
+          | i /= indOut && j /= indIn = a (i,j) + a (i, indIn) * a (indOut, j) * factor
+        mapC i
+          | i == indIn = -factor * c indIn
+          | otherwise  = c i + c indIn * a (indOut, i) * factor
+        a (i, j) = getA pd (i, j)
+        aswitch  = a (indOut, indIn)
+        b i      = getB pd i
+        bout     = b indOut * factor
+        c i      = getCoeff pd i
+        cv       = objectiveValue pd
+        cv'      = cv + bout * c indIn
+        factor   = (-1) / aswitch
+        replaceAt ls ind v = [ if i == ind then v else ls!!i | i <- [0..length ls -1]]

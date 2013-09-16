@@ -32,7 +32,7 @@ check (file, (pd, (Bounded iId oId cv))) =
             assertFailure $ "OUT Variables do not match - FAILED (expected " ++ show oId ++ " but was " ++ show oV ++ ")"
         if c `near` cv then return ()
         else 
-            assertFailure $ "objective value            - FAILED (expected " ++ show cv ++ " but was " ++ show c ++ ")"
+            assertFailure $ "objective value            - FAILED (expected " ++ show cv ++ " but was " ++ show c ++ " switched " ++ show iV ++ "/" ++ show oV ++ ")"
 
 
 loadAll :: FilePath -> IO [ (FilePath, (PivotDict, OutputFile))]
