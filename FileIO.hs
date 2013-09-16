@@ -4,7 +4,7 @@ module FileIO
     , readResultForDictFile
     , writeOutputFile
     , findDictFiles
-    , writeResult
+    , writeResultFile
     ) where
 
 
@@ -30,6 +30,10 @@ readResultForDictFile = (liftM $ readResultFile) . fileContent . getOutputFile
 
 writeOutputFile :: FilePath -> OutputFile -> IO ()
 writeOutputFile path output =  writeFile path $ writeOutput output
+
+
+writeResultFile :: FilePath -> PivotingResult -> IO ()
+writeResultFile path output =  writeFile path $ writeResult output
 
 
 fileContent :: FilePath -> IO String
