@@ -17,6 +17,12 @@ tests =
     [
      testCase 
         "test cases of assignment1 from file system" $
-        testWithAssignmentTests ".\\part1TestCases\\unitTests"
+        testWithAssignmentTestsForProblem1 ".\\part1TestCases\\unitTests"
+    ], 
+    testGroup "assignment 2 test cases"
+    [
+     testCase 
+        "test cases of assignment2 from file system" $
+        testWithAssignmentTestsForProblem2 ".\\part2TestCases\\unitTests"
     ]
   ]

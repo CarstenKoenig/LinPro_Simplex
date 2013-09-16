@@ -4,9 +4,11 @@ module Simplex
     , PivotingResult (..)
     , VarIndex
     , OutputFile (..)
+    , ResultFile (..)
     , findInOutVariables
     , pivotStep
     , runPivoting
+    , objectiveValue
     ) where
 
 import Data.List (minimumBy)
@@ -45,13 +47,18 @@ data PivotingStepResult =
   deriving (Show)
 
 data PivotingResult =
-    Optimized PivotDict
+    Optimized { result :: PivotDict, steps :: Int }
   | ProblemUnbounded
   deriving (Show)
 
 data OutputFile = 
       Bounded   { inId :: Int, outId :: Int, newObjective :: Double }
     | Unbounded
+    deriving (Show)    
+
+data ResultFile = 
+      BoundedResult   { value :: Double, nrSteps :: Int }
+    | UnboundedResult
     deriving (Show)    
 
 findInOutVariables :: PivotDict -> Maybe (VarId, VarId, Double)
@@ -71,11 +78,13 @@ pivotStep pd =
                       Just outIndex -> Intermediate $ pivoting pd (inIndex, outIndex)
 
 runPivoting :: PivotDict -> PivotingResult
-runPivoting pd =
-  case pivotStep pd of
-    Finished pd'     -> Optimized pd'
-    IsUnbounded      -> ProblemUnbounded
-    Intermediate pd' -> runPivoting pd'
+runPivoting = runner 0
+  where 
+    runner i pd =
+      case pivotStep pd of
+        Finished pd'     -> Optimized pd' i
+        IsUnbounded      -> ProblemUnbounded
+        Intermediate pd' -> runner (i+1) pd'
 
 objectiveValue :: PivotDict -> Double
 objectiveValue = head . objectiveCoeffs
@@ -84,7 +93,10 @@ objectiveFunCoeffs :: PivotDict -> [Double]
 objectiveFunCoeffs = tail . objectiveCoeffs
 
 getA :: PivotDict -> (Int, Int) -> Double
-getA pd (r,c) = (aMatrix pd) !! r !! c
+getA pd (r,c) = 
+  if r >= nrBasic pd then error $ "row-index to high: " ++ show r ++ " [limit: " ++ show (nrBasic pd) ++ "]"
+  else if c >= nrNonBasic pd then error $ "col-index to high: " ++ show c ++ " [limit: " ++ show (nrNonBasic pd) ++ "]"
+  else (aMatrix pd) !! r !! c
 
 getB :: PivotDict -> Int -> Double
 getB pd r = bList pd !! r
@@ -108,12 +120,14 @@ findInVariableIndex pd =
 findOutVariableIndex :: PivotDict -> VarIndex -> Maybe VarIndex
 findOutVariableIndex pd inIndex = 
   if inIndex < 0 || null candidates then Nothing else Just $ minimumBy comp candidates
-  where candidates = [ i | i <- [0..nrBasic pd - 1], a i < 0 && factor i > 0]
+  where candidates = [ i | i <- [0..nrBasic pd - 1], a i < 0]
         comp i j = 
-          case compare (factor i) (factor j) of
+          case compare (boundedf i) (boundedf j) of
             EQ        -> compare (getBasicId pd i) (getBasicId pd j)
             x         -> x
         factor i   = b i / (- a i)
+        boundedf i = let f = factor i in
+                     if f <= 0 then 0 else f
         a i        = getA pd (i, inIndex)
         b i        = getB pd i
 
@@ -121,9 +135,9 @@ pivoting :: PivotDict -> (VarIndex, VarIndex) -> PivotDict
 pivoting pd (indIn, indOut) = PivotDict (nrBasic pd) (nrNonBasic pd) basicIds' nonBasicIds' bs' as' cs'
   where basicIds'    = replaceAt (basicIds pd) indOut (getNonBasicId pd indIn)
         nonBasicIds' = replaceAt (nonBasicIds pd) indIn (getBasicId pd indOut)
-        bs'          = [ mapB i    | i <- [0..nrNonBasic pd -1]]
-        as'          = [ [mapA i j | j <- [0..nrBasic pd -1]] | i <- [0..nrNonBasic pd -1] ]
-        cs'          = cv' : [ mapC i | i <- [0..nrBasic pd -1]]
+        bs'          = [ mapB i    | i <- [0..nrBasic pd -1]]
+        as'          = [ [mapA i j | j <- [0..nrNonBasic pd -1]] | i <- [0..nrBasic pd -1] ]
+        cs'          = cv' : [ mapC i | i <- [0..nrNonBasic pd -1]]
         mapB i
           | i == indOut = bout
           | otherwise   = b i + a (i, indIn) * bout

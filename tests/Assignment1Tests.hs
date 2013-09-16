@@ -1,5 +1,6 @@
 module Assignment1Tests 
-    ( testWithAssignmentTests
+    ( testWithAssignmentTestsForProblem1
+    , testWithAssignmentTestsForProblem2
     ) where
 
 
@@ -13,14 +14,14 @@ import Simplex
 near :: Double -> Double -> Bool
 a `near` b = abs (b-a) < 0.0001
 
-check :: (FilePath, (PivotDict, OutputFile)) -> Assertion
-check (file, (pd, Unbounded)) = do
+checkProblem1 :: (FilePath, (PivotDict, OutputFile)) -> Assertion
+checkProblem1 (file, (pd, Unbounded)) = do
     putStrLn $ "checking unbounded case " ++ file
     case findInOutVariables pd of
         Nothing -> return ()
         Just (iV, oV, c) -> do
             assertFailure $ "not UNBOUNDED              - FAILED (" ++ show iV ++ ", " ++ show oV ++ ", " ++ show c ++ ")"
-check (file, (pd, (Bounded iId oId cv))) =
+checkProblem1 (file, (pd, (Bounded iId oId cv))) =
     let (iV, oV, c) = maybe (-1, -1, -1) id $ findInOutVariables pd
     in do
         putStrLn $ "checking bounded case " ++ file
@@ -35,23 +36,49 @@ check (file, (pd, (Bounded iId oId cv))) =
             assertFailure $ "objective value            - FAILED (expected " ++ show cv ++ " but was " ++ show c ++ " switched " ++ show iV ++ "/" ++ show oV ++ ")"
 
 
-loadAll :: FilePath -> IO [ (FilePath, (PivotDict, OutputFile))]
-loadAll fPath = do
+checkProblem2 :: (FilePath, (PivotDict, ResultFile)) -> Assertion
+checkProblem2 (file, (pd, UnboundedResult)) = do
+    putStrLn $ "checking unbounded case " ++ file
+    case runPivoting pd of
+        ProblemUnbounded -> return ()
+        Optimized _ _ -> do
+            assertFailure $ "should be UNBOUNDED              - FAILED"
+checkProblem2 (file, (pd, (BoundedResult val s))) = do
+    putStrLn $ "checking bounded case " ++ file
+    case runPivoting pd of
+        ProblemUnbounded -> 
+            assertFailure $ "should be BOUNDED                - FAILED"
+        Optimized pd os -> do
+            if os == s then return ()
+            else 
+                assertFailure $ "STEPS do not match         - FAILED (expected " ++ show s ++ " but was " ++ show os ++ ")"
+            if objectiveValue pd `near` val then return ()
+            else 
+                assertFailure $ "objective value            - FAILED (expected " ++ show val ++ " but was " ++ show (objectiveValue pd) ++ ")"
+
+
+loadAll :: (FilePath -> IO a) -> FilePath -> IO [ (FilePath, (PivotDict, a))]
+loadAll rf fPath = do
     files <- findDictFiles fPath
     forM files readPair
     where 
-        readPair :: FilePath -> IO (FilePath, (PivotDict, OutputFile))
         readPair file = do
             pd <- readDictFile file
-            op <- readOutputForDictFile file
+            op <- rf file
             return (file, (pd, op))
 
-checkAll :: [(FilePath, (PivotDict, OutputFile))] -> Assertion
-checkAll = mapM_ check
+checkAllProblem1 :: [(FilePath, (PivotDict, OutputFile))] -> Assertion
+checkAllProblem1 = mapM_ checkProblem1
 
--- A recommended way of creating HUnit tests. Such tests are easy to integrate
--- with test-framework (see MainTestSuite.hs)
-testWithAssignmentTests :: FilePath -> Assertion
-testWithAssignmentTests fPath = do
-    files <- loadAll fPath
-    checkAll files
+checkAllProblem2 :: [(FilePath, (PivotDict, ResultFile))] -> Assertion
+checkAllProblem2 = mapM_ checkProblem2
+
+testWithAssignmentTestsForProblem1 :: FilePath -> Assertion
+testWithAssignmentTestsForProblem1 fPath = do
+    files <- loadAll readOutputForDictFile fPath
+    checkAllProblem1 files
+
+testWithAssignmentTestsForProblem2 :: FilePath -> Assertion
+testWithAssignmentTestsForProblem2 fPath = do
+    files <- loadAll readResultForDictFile fPath
+    checkAllProblem2 files

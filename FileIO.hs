@@ -1,8 +1,10 @@
 module FileIO 
     ( readDictFile
     , readOutputForDictFile
+    , readResultForDictFile
     , writeOutputFile
     , findDictFiles
+    , writeResult
     ) where
 
 
@@ -20,6 +22,10 @@ readDictFile =  (liftM readPivotDict) . fileContent
 
 readOutputForDictFile :: FilePath -> IO OutputFile
 readOutputForDictFile = (liftM $ readOutputFile) . fileContent . getOutputFile
+
+
+readResultForDictFile :: FilePath -> IO ResultFile
+readResultForDictFile = (liftM $ readResultFile) . fileContent . getOutputFile
 
 
 writeOutputFile :: FilePath -> OutputFile -> IO ()
@@ -60,10 +66,24 @@ readOutputFile input =
             line i = lns !! i
             lns = lines input 
 
+readResultFile :: String -> ResultFile
+readResultFile input = 
+    if line 0 == "UNBOUNDED" then
+        UnboundedResult
+    else 
+        BoundedResult val s
+    where   val   = read $ line 0
+            s     = read $ line 1
+            line i = lns !! i
+            lns = lines input 
+
 writeOutput :: OutputFile -> String
 writeOutput Unbounded                = "UNBOUNDED"
 writeOutput (Bounded iId oId obj) = show iId ++ "\n" ++ show oId ++ "\n" ++ show obj ++ "\n"
 
+writeResult :: PivotingResult -> String
+writeResult ProblemUnbounded = "UNBOUNDED"
+writeResult (Optimized pd s) = show (objectiveValue pd) ++ "\n" ++ show s ++ "\n"
 
 findDictFiles :: FilePath -> IO [FilePath]
 findDictFiles inPath = do
