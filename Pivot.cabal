@@ -20,6 +20,7 @@ executable Pivot
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.0 && < 4.7,
+                       vector,
                        directory,
                        filepath
   -- hs-source-dirs:      
@@ -31,6 +32,7 @@ test-suite Pivot-tests
   hs-source-dirs: tests, .
   main-is: TestSuite.hs
   build-depends: base,
+                 vector,
                  HUnit,
                  QuickCheck,
                  test-framework,
