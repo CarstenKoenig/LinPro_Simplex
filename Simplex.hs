@@ -10,6 +10,8 @@ module Simplex
     ) where
 
 import Data.List (minimumBy)
+import qualified Data.Vector as V
+import SimplexVector
 
 type VarIndex = Int
 type VarId    = Int
@@ -30,11 +32,9 @@ type VarId    = Int
 data PivotDict = PivotDict
     { nrBasic         :: Int          -- ^ this is the number of basic variables (initial the slack variables)
     , nrNonBasic      :: Int          -- ^ this is the number on non-basic variables
-    , basicIds        :: [VarId]      -- ^ these are the indicies of the basic variables
-    , nonBasicIds     :: [VarId]      -- ^ these are the indicies of the non-basic variables
-    , bList           :: [Double]     -- ^ these comes from the original problem-data
-    , aMatrix         :: [[Double]]   -- ^ these are the constraint coefficients for the non-basic variables
-    , objectiveCoeffs :: [Double]     -- ^ these are the coefficents for the objective function (c_0 and c_1 ... c_n)
+    , basicIds        :: Vector VarId -- ^ these are the indicies of the basic variables
+    , nonBasicIds     :: Vector VarId -- ^ these are the indicies of the non-basic variables
+    , matrix          :: DoubleMatrix -- ^ represents the complete problem - rows are for the basic-variables (last one is the objective), first row is b (last one is the objective-value)
     } deriving (Show)
 
 {- |
@@ -94,28 +94,34 @@ runPivoting = runner 0
 
 -- | extracts the objective-value of a given Pivot-Dictionary
 objectiveValue :: PivotDict -> Double
-objectiveValue = head . objectiveCoeffs
+objectiveValue = V.head . objectiveCoeffs
 
-objectiveFunCoeffs :: PivotDict -> [Double]
-objectiveFunCoeffs = tail . objectiveCoeffs
+objectiveCoeffs :: PivotDict -> DoubleVector
+objectiveCoeffs = V.last . matrix
+
+objectiveFunCoeffs :: PivotDict -> DoubleVector
+objectiveFunCoeffs = V.tail . objectiveCoeffs
+
+getRow :: PivotDict -> Int -> DoubleVector
+getRow pd r = matrix pd .! r
 
 getA :: PivotDict -> (Int, Int) -> Double
 getA pd (r,c) = 
-  if r >= nrBasic pd then error $ "row-index to high: " ++ show r ++ " [limit: " ++ show (nrBasic pd) ++ "]"
+  if r > nrBasic pd then error $ "row-index to high: " ++ show r ++ " [limit: " ++ show (nrBasic pd) ++ "]"
   else if c >= nrNonBasic pd then error $ "col-index to high: " ++ show c ++ " [limit: " ++ show (nrNonBasic pd) ++ "]"
-  else (aMatrix pd) !! r !! c
+  else (matrix pd) .!! (r, c+1)
 
 getB :: PivotDict -> Int -> Double
-getB pd r = bList pd !! r
+getB pd r = (matrix pd) .!! (r, 0)
 
 getCoeff :: PivotDict -> Int -> Double
-getCoeff pd index = objectiveFunCoeffs pd !! index
+getCoeff pd index = objectiveFunCoeffs pd .! index
 
 getBasicId :: PivotDict -> VarIndex -> VarId
-getBasicId pd index = basicIds pd !! index
+getBasicId pd index = basicIds pd .! index
 
 getNonBasicId :: PivotDict -> VarIndex -> VarId
-getNonBasicId pd index = nonBasicIds pd !! index
+getNonBasicId pd index = nonBasicIds pd .! index
 
 findInVariableIndex :: PivotDict -> Maybe VarIndex
 findInVariableIndex pd =
@@ -139,32 +145,16 @@ findOutVariableIndex pd inIndex =
         b i        = getB pd i
 
 pivoting :: PivotDict -> (VarIndex, VarIndex) -> PivotDict
-pivoting pd (indIn, indOut) = PivotDict (nrBasic pd) (nrNonBasic pd) basicIds' nonBasicIds' bs' as' cs'
-  where basicIds'    = replaceAt (basicIds pd) indOut (getNonBasicId pd indIn)
-        nonBasicIds' = replaceAt (nonBasicIds pd) indIn (getBasicId pd indOut)
-        bs'          = [ mapB i    | i <- [0..nrBasic pd -1]]
-        as'          = [ [mapA i j | j <- [0..nrNonBasic pd -1]] | i <- [0..nrBasic pd -1] ]
-        cs'          = cv' : [ mapC i | i <- [0..nrNonBasic pd -1]]
-        mapB i
-          | i == indOut = bout
-          | otherwise   = b i + a (i, indIn) * bout
-        mapA i j
-          | i == indOut && j == indIn = -factor
-          | i == indOut && j /= indIn = factor * a (indOut, j)
-          | i /= indOut && j == indIn = -factor * a (i, indIn)
-          | otherwise                 = a (i,j) + a (i, indIn) * a (indOut, j) * factor
-        mapC i
-          | i == indIn = -factor * c indIn
-          | otherwise  = c i + c indIn * a (indOut, i) * factor
+pivoting pd (indIn, indOut) = PivotDict (nrBasic pd) (nrNonBasic pd) basicIds' nonBasicIds' matrix'
+  where basicIds'    = basicIds pd ./ (indOut, getNonBasicId pd indIn)
+        nonBasicIds' = nonBasicIds pd ./ (indIn, getBasicId pd indOut)
+        matrix'      = vcreate [ mapA i    | i <- [0..nrBasic pd ]]
+        base         = vcreate (bout : [if j == indIn then -factor else factor * a (indOut, j) | j <- [0..nrNonBasic pd -1]])
+        mapA i
+          | i == indOut = base
+          | otherwise   = row i .+. a (i, indIn) .* base
         bout     = b indOut * factor
-        cv'      = objectiveValue pd + bout * c indIn
         factor   = (-1) / a (indOut, indIn)
         a (i, j) = getA pd (i, j)
         b i      = getB pd i
-        c i      = getCoeff pd i
-
-replaceAt :: [a] -> Int -> a -> [a]
-replaceAt [] _ _ = []
-replaceAt (h:tl) i v
-  | i == 0    = v:tl
-  | otherwise = h:replaceAt tl (i-1) v
+        row i    = getRow pd i ./ (indIn+1, 0)

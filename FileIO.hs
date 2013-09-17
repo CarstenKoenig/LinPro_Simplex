@@ -16,6 +16,7 @@ import System.Directory (getDirectoryContents)
 import System.FilePath((</>), addExtension)
 
 import Simplex
+import SimplexVector
 
 data OutputFile = 
       Bounded   { inId :: Int, outId :: Int, newObjective :: Double }
@@ -52,11 +53,12 @@ fileContent = readFile
 
 
 readPivotDict :: FilePath -> PivotDict
-readPivotDict input = PivotDict m n bis nis bs as ocs
+readPivotDict input = PivotDict m n bis nis mat
     where   m    = readWord 0 $ line 0
             n    = readWord 1 $ line 0
-            bis  = readInts $ line 1
-            nis  = readInts $ line 2
+            bis  = vcreate . readInts $ line 1
+            nis  = vcreate . readInts $ line 2
+            mat  = mcreate $ [ (bs!!i):(as!!i) | i <- [0..m-1]] ++ [ocs]
             bs   = readDbls $ line 3
             as   = map (readDbls . line) [4 .. 3+m]
             ocs  = readDbls $ line (m+4)
