@@ -13,6 +13,7 @@ import Data.List (minimumBy)
 import qualified Data.Vector as V
 import SimplexVector
 
+-- | used for pivoting - index for variables (maps Index -> Variable ID)
 type VarIndex = Int
 type VarId    = Int
 
